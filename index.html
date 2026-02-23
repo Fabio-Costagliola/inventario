@@ -55,15 +55,16 @@
     </div>
   </header>
 
-  <input id="search" type="search" placeholder="Cerca descrizione, location, scaffale, cesta…" autocomplete="off" />
+  <input id="search" type="search" placeholder="Cerca descrizione, location, scaffale, cesta, note…" autocomplete="off" />
 
   <section class="card">
     <div class="grid">
       <input id="descrizione" placeholder="Descrizione" />
       <input id="quantita" type="number" inputmode="numeric" placeholder="Quantità" min="0" step="1" />
-      <input id="location1" placeholder="Location1" />
+      <input id="location" placeholder="Location" />
       <input id="scaffale" placeholder="Scaffale" />
       <input id="cesta" placeholder="Cesta" />
+	  <input id="note" placeholder="Note" />
     </div>
     <div class="actions">
       <button id="add" class="btn btn-primary">Aggiungi</button>
@@ -99,9 +100,10 @@
             <div>
               <div class="item-title">${escapeHtml(it.descrizione)}</div>
               <div class="item-sub">
-                Q: ${it.quantita ?? 0} • Loc: ${escapeHtml(it.location1||'—')}
+                Q: ${it.quantita ?? 0} • Loc: ${escapeHtml(it.location||'—')}
                 • Scaffale: ${escapeHtml(it.scaffale||'—')}
                 • Cesta: ${escapeHtml(it.cesta||'—')}
+				• Note: ${escapeHtml(it.note||'—')}
               </div>
             </div>
             <div class="item-sub">${new Date(it.created_at).toLocaleString()}</div>
@@ -129,9 +131,10 @@
       const pattern = `%${q}%`;
       const orExpr =
         `descrizione.ilike.${pattern},` +
-        `location1.ilike.${pattern},` +
+        `location.ilike.${pattern},` +
         `scaffale.ilike.${pattern},` +
-        `cesta.ilike.${pattern}`;
+        `cesta.ilike.${pattern},` +
+		`note.ilike.${pattern}`;
       const { data, error } = await db.from('inventario')
         .select('*')
         .or(orExpr)
@@ -144,7 +147,7 @@
     function applySearchLocal(q){
       const s = q.toLowerCase();
       const res = cache.filter(it => [
-        it.descrizione, it.location1, it.scaffale, it.cesta
+        it.descrizione, it.location, it.scaffale, it.cesta, it.note
       ].map(v => (v??'').toString().toLowerCase()).join('|').includes(s));
       render(res);
     }
@@ -154,9 +157,10 @@
       const nuovo = {
         descrizione: $('#descrizione').value.trim(),
         quantita: Number($('#quantita').value || 0),
-        location1: $('#location1').value.trim(),
+        location: $('#location').value.trim(),
         scaffale:  $('#scaffale').value.trim(),
-        cesta:     $('#cesta').value.trim()
+        cesta:     $('#cesta').value.trim(),
+		note:     $('#note').value.trim()
       };
       if (!nuovo.descrizione) return alert('La descrizione è obbligatoria');
       const { error } = await db.from('inventario').insert(nuovo);
@@ -169,16 +173,18 @@
       const it = cache.find(x => x.id === id); if (!it) return;
       const d = prompt('Descrizione:', it.descrizione); if (d === null) return;
       const q = prompt('Quantità:', it.quantita); if (q === null) return;
-      const l = prompt('Location1:', it.location1 ?? ''); if (l === null) return;
+      const l = prompt('Location:', it.location ?? ''); if (l === null) return;
       const s = prompt('Scaffale:', it.scaffale ?? ''); if (s === null) return;
       const c = prompt('Cesta:', it.cesta ?? ''); if (c === null) return;
+	  const n = prompt('Note:', it.note ?? ''); if (c === null) return;
 
       const { error } = await db.from('inventario').update({
         descrizione: d.trim(),
         quantita: Number(q || 0),
-        location1: l.trim(),
+        location: l.trim(),
         scaffale: s.trim(),
-        cesta: c.trim()
+        cesta: c.trim(),
+		note: n.trim()
       }).eq('id', id);
       if (error) return alert(error.message);
       await loadAll();
@@ -201,7 +207,7 @@
 
     // Pulisci form
     document.getElementById('reset').addEventListener('click', clearForm);
-    function clearForm(){ ['#descrizione','#quantita','#location1','#scaffale','#cesta'].forEach(sel => document.querySelector(sel).value=''); document.getElementById('descrizione').focus(); }
+    function clearForm(){ ['#descrizione','#quantita','#location','#scaffale','#cesta','#note'].forEach(sel => document.querySelector(sel).value=''); document.getElementById('descrizione').focus(); }
 
     // Avvio
     loadAll();
