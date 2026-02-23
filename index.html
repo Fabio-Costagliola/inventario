@@ -72,7 +72,11 @@
   </section>
 
   <section id="list" class="list" aria-live="polite"></section>
-  <footer>Ricerca dinamica — dati su Supabase.</footer>
+  <footer>
+  Dati su Supabase • <span id="app-version">verifica versione…</span>
+  <span id="update-banner" style="display:none; margin-left:8px;">— Nuova versione disponibile. <button id="refresh-app">Aggiorna</button></span>
+</footer>
+
 
   <script type="text/javascript">
     // *** INSERISCI QUI LE TUE CREDENZIALI SUPABASE ***
@@ -202,5 +206,78 @@
     // Avvio
     loadAll();
   </script>
+  <script>
+  // ===== Service Worker: registrazione + gestione versioning =====
+  const versionEl = document.getElementById('app-version');
+  const updateBanner = document.getElementById('update-banner');
+  const refreshBtn = document.getElementById('refresh-app');
+
+  // Mostra versione ricevuta dal SW
+  function setVersionLabel(v) {
+    if (v) versionEl.textContent = v;
+  }
+
+  // Triggera reload “hard” per caricare subito la nuova versione
+  async function hardReload() {
+    // Disattiva SW corrente, ricarica
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister().catch(()=>{})));
+    }
+    location.reload(true);
+  }
+
+  refreshBtn?.addEventListener('click', hardReload);
+
+  // Registra SW
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('./sw.js');
+
+        // SW attivo manda la versione (activate → broadcast)
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (!event.data) return;
+          const { type, version } = event.data;
+          if (type === 'SW_VERSION') {
+            setVersionLabel(version);
+          }
+        });
+
+        // Se arriva un SW nuovo, mostra il banner “aggiorna”
+        if (reg.waiting) {
+          updateBanner.style.display = 'inline';
+        }
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Nuova versione installata, in attesa → mostra banner
+              updateBanner.style.display = 'inline';
+            }
+          });
+        });
+
+        // Chiede esplicitamente la versione al SW (per la prima visita)
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'GET_SW_VERSION' });
+        } else {
+          // Se non c'è ancora controller, riprova tra poco
+          setTimeout(() => {
+            navigator.serviceWorker.controller?.postMessage({ type: 'GET_SW_VERSION' });
+          }, 800);
+        }
+
+      } catch (err) {
+        console.warn('SW registration failed', err);
+        versionEl.textContent = 'n/d';
+      }
+    });
+  } else {
+    versionEl.textContent = 'SW non supportato';
+  }
+</script>
 </body>
+
 </html>
