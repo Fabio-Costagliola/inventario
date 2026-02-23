@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Inventario</title>
+
+  <!-- iPhone: apertura come web‑app fullscreen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Inventario">
+  <link rel="apple-touch-icon" href="icons/icon-1024.png">
+
+  <!-- PWA (utile su altre piattaforme, opzionale su iOS) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f2f2f7">
+
+  <style>
+    :root{--bg:#f2f2f7;--card:#fff;--muted:#6b7280;--primary:#0a84ff;--danger:#d32f2f;--text:#111}
+    *{box-sizing:border-box}
+    body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+    h1{font-size:20px;margin:0}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:8px 10px;font-size:14px}
+    input[type=search]{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;font-size:16px;margin:8px 0 14px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
+    .grid{display:grid;grid-template-columns:1fr;gap:10px}
+    @media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr)}}
+    .grid input{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;font-size:16px}
+    .actions{display:flex;gap:8px;margin-top:8px}
+    .btn{padding:12px 14px;border-radius:12px;border:none;font-weight:600;font-size:15px}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-outline{background:#fff;border:1px solid #e5e7eb}
+    .btn-danger{background:var(--danger);color:#fff}
+    .list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+    .item{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
+    .item-header{display:flex;justify-content:space-between;gap:8px}
+    .item-title{font-weight:700}
+    .item-sub{color:var(--muted);font-size:13px}
+    .item-actions{display:flex;gap:8px;margin-top:8px}
+    .hidden{display:none!important}
+    footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
+  </style>
+
+  <!-- Supabase JS (CDN supportata ufficialmente) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header>
+    <h1>Inventario</h1>
+    <div class="toolbar">
+      <span class="chip">Multi‑dispositivo</span>
+      <span class="chip">DB online</span>
+    </div>
+  </header>
+
+  <input id="search" type="search" placeholder="Cerca descrizione, location, scaffale, cesta…" autocomplete="off" />
+
+  <section class="card">
+    <div class="grid">
+      <input id="descrizione" placeholder="Descrizione" />
+      <input id="quantita" type="number" inputmode="numeric" placeholder="Quantità" min="0" step="1" />
+      <input id="location1" placeholder="Location1" />
+      <input id="scaffale" placeholder="Scaffale" />
+      <input id="cesta" placeholder="Cesta" />
+    </div>
+    <div class="actions">
+      <button id="add" class="btn btn-primary">Aggiungi</button>
+      <button id="reset" class="btn btn-outline">Pulisci</button>
+    </div>
+  </section>
+
+  <section id="list" class="list" aria-live="polite"></section>
+  <footer>Ricerca dinamica — dati su Supabase.</footer>
+
+  <script type="text/javascript">
+    // *** INSERISCI QUI LE TUE CREDENZIALI SUPABASE ***
+    const SUPABASE_URL = "https://qhthehtqewrrlgoujdnp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_UYHXa7HimcTVGvNmtfuXQg_UiDtMbK7";
+
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const $ = sel => document.querySelector(sel);
+    const listEl = $('#list'), searchEl = $('#search');
+
+    let cache = []; // ultimi risultati caricati
+
+    function escapeHtml(s){return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));}
+    function itemHTML(it){
+      return `
+        <div class="item" data-id="${it.id}">
+          <div class="item-header">
+            <div>
+              <div class="item-title">${escapeHtml(it.descrizione)}</div>
+              <div class="item-sub">
+                Q: ${it.quantita ?? 0} • Loc: ${escapeHtml(it.location1||'—')}
+                • Scaffale: ${escapeHtml(it.scaffale||'—')}
+                • Cesta: ${escapeHtml(it.cesta||'—')}
+              </div>
+            </div>
+            <div class="item-sub">${new Date(it.created_at).toLocaleString()}</div>
+          </div>
+          <div class="item-actions">
+            <button class="btn btn-outline" onclick="editItem('${it.id}')">Modifica</button>
+            <button class="btn btn-danger"  onclick="deleteItem('${it.id}')">Elimina</button>
+          </div>
+        </div>
+      `;
+    }
+    function render(arr){ listEl.innerHTML = arr.length ? arr.map(itemHTML).join('') : '<div class="item-sub">Nessun elemento.</div>'; }
+
+    // Carica tutti (ultimi in alto)
+    async function loadAll(){
+      const { data, error } = await db.from('inventario').select('*').order('created_at', { ascending: false });
+      if (error) { alert(error.message); return; }
+      cache = data || [];
+      render(cache);
+    }
+
+    // Ricerca server‑side (ILIKE su più colonne) con fallback locale
+    async function searchServer(q){
+      if (!q) return loadAll();
+      const pattern = `%${q}%`;
+      const orExpr =
+        `descrizione.ilike.${pattern},` +
+        `location1.ilike.${pattern},` +
+        `scaffale.ilike.${pattern},` +
+        `cesta.ilike.${pattern}`;
+      const { data, error } = await db.from('inventario')
+        .select('*')
+        .or(orExpr)
+        .order('created_at', { ascending: false });
+      if (error) { console.warn('Ricerca server-side non riuscita, uso cache locale:', error.message); applySearchLocal(q); return; }
+      cache = data || [];
+      render(cache);
+    }
+
+    function applySearchLocal(q){
+      const s = q.toLowerCase();
+      const res = cache.filter(it => [
+        it.descrizione, it.location1, it.scaffale, it.cesta
+      ].map(v => (v??'').toString().toLowerCase()).join('|').includes(s));
+      render(res);
+    }
+
+    // Aggiungi
+    $('#add').addEventListener('click', async ()=>{
+      const nuovo = {
+        descrizione: $('#descrizione').value.trim(),
+        quantita: Number($('#quantita').value || 0),
+        location1: $('#location1').value.trim(),
+        scaffale:  $('#scaffale').value.trim(),
+        cesta:     $('#cesta').value.trim()
+      };
+      if (!nuovo.descrizione) return alert('La descrizione è obbligatoria');
+      const { error } = await db.from('inventario').insert(nuovo);
+      if (error) return alert(error.message);
+      clearForm(); await loadAll();
+    });
+
+    // Modifica
+    window.editItem = async (id) => {
+      const it = cache.find(x => x.id === id); if (!it) return;
+      const d = prompt('Descrizione:', it.descrizione); if (d === null) return;
+      const q = prompt('Quantità:', it.quantita); if (q === null) return;
+      const l = prompt('Location1:', it.location1 ?? ''); if (l === null) return;
+      const s = prompt('Scaffale:', it.scaffale ?? ''); if (s === null) return;
+      const c = prompt('Cesta:', it.cesta ?? ''); if (c === null) return;
+
+      const { error } = await db.from('inventario').update({
+        descrizione: d.trim(),
+        quantita: Number(q || 0),
+        location1: l.trim(),
+        scaffale: s.trim(),
+        cesta: c.trim()
+      }).eq('id', id);
+      if (error) return alert(error.message);
+      await loadAll();
+    };
+
+    // Elimina
+    window.deleteItem = async (id) => {
+      if (!confirm('Eliminare questo elemento?')) return;
+      const { error } = await db.from('inventario').delete().eq('id', id);
+      if (error) return alert(error.message);
+      await loadAll();
+    };
+
+    // Ricerca (debounced)
+    let t; searchEl.addEventListener('input', e=>{
+      clearTimeout(t);
+      const q = e.target.value.trim();
+      t = setTimeout(()=> searchServer(q), 160);
+    });
+
+    // Pulisci form
+    document.getElementById('reset').addEventListener('click', clearForm);
+    function clearForm(){ ['#descrizione','#quantita','#location1','#scaffale','#cesta'].forEach(sel => document.querySelector(sel).value=''); document.getElementById('descrizione').focus(); }
+
+    // Avvio
+    loadAll();
+  </script>
+</body>
+</html>
