@@ -1,5 +1,5 @@
 // ====== CONFIGURAZIONE VERSIONE ======
-const CACHE_VERSION = 'v1.0.0';  // <--- aggiorna qui a ogni release
+const CACHE_VERSION = 'v1.0.1';  // <--- aggiorna qui a ogni release
 const CACHE_NAME = `inventario-${CACHE_VERSION}`;
 
 // Elenco asset da mettere in cache all'install
@@ -69,4 +69,5 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_SW_VERSION') {
     event.source?.postMessage({ type: 'SW_VERSION', version: CACHE_VERSION });
   }
+
 });
