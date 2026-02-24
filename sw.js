@@ -1,5 +1,5 @@
 // ====== CONFIGURAZIONE VERSIONE ======
-const CACHE_VERSION = 'v1.0.8';  // <--- aggiorna qui a ogni release
+const CACHE_VERSION = 'v1.0.9';  // <--- aggiorna qui a ogni release
 const CACHE_NAME = `inventario-${CACHE_VERSION}`;
 
 // Elenco asset da mettere in cache all'install
